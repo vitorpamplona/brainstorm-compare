@@ -183,7 +183,7 @@
   const engines = [
     {
       id: "brainstorm",
-      title: "Brainstorm (Meili)",
+      title: "Meili",
       search(text, signal, limit) {
         const url = `https://brainstorm.world/api/search/profiles/meili?q=${encodeURIComponent(text)}&limit=${limit}&offset=0&wotPov=house`;
         return fetch(url, { signal }).then(r => {
@@ -274,8 +274,11 @@
     const s = state[i];
     const col = $popup.querySelector(`.popup-col[data-eng="${i}"]`);
     if (!col) return;
+    const count = (s.hits || []).length;
+    const countText = s.error ? "" : `${count} of ${s.total ?? "?"}`;
     const timing = s.lastMs != null ? `${s.lastMs} ms` : "";
-    const head = `<div class="popup-col-head"><span>${esc(eng.title)}</span><span class="timing">${timing}</span></div>`;
+    const meta = [countText, timing].filter(Boolean).join(" · ");
+    const head = `<div class="popup-col-head"><span>${esc(eng.title)}</span><span class="timing">${meta}</span></div>`;
     let body;
     if (s.error) body = `<div class="error">${esc(s.error)}</div>`;
     else if (s.loading && (!s.hits || s.hits.length === 0)) body = `<div class="empty">Loading&hellip;</div>`;
