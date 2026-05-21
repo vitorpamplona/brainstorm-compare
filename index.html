@@ -4,6 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Search</title>
+<link rel="preconnect" href="https://vespa-staging.nosfabrica.com" crossorigin />
+<link rel="preconnect" href="https://brainstorm.world" crossorigin />
 <style>
   :root {
     --bg: #fafafa;
@@ -204,7 +206,7 @@
     {
       id: "vespa",
       title: "Vespa",
-      search(text, signal, limit) {
+      search(text, signal) {
         return fetch("https://vespa-staging.nosfabrica.com/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -214,7 +216,7 @@
           if (!r.ok) throw new Error("HTTP " + r.status);
           return r.json();
         }).then(d => ({
-          hits: (d.hits || []).slice(0, limit),
+          hits: d.hits || [],
           total: d.total ?? (d.hits || []).length,
           extra: {},
         }));
@@ -229,7 +231,17 @@
   const $popup = document.getElementById("popup");
   const $columns = document.getElementById("columns");
 
-  const state = engines.map(() => ({ popupAbort: null, fullAbort: null, hits: [], extra: {} }));
+  const state = engines.map(() => ({
+    popupAbort: null,
+    fullAbort: null,
+    requestId: 0,
+    hits: [],
+    extra: {},
+    total: null,
+    lastMs: null,
+    loading: false,
+    error: null,
+  }));
   let debounceTimer = null;
   let activeKey = null;
 
@@ -245,15 +257,31 @@
   function pictureOf(h) { return h.picture || ""; }
   function aboutOf(h) { return h.about || ""; }
 
-  function renderPopup() {
-    $popup.innerHTML = engines.map((eng, i) => {
-      const s = state[i];
-      const items = s.hits.slice(0, POPUP_LIMIT);
-      const head = `<div class="popup-col-head"><span>${esc(eng.title)}</span><span class="timing">${s.lastMs != null ? s.lastMs + " ms" : ""}</span></div>`;
-      if (s.error) return `<div class="popup-col">${head}<div class="error">${esc(s.error)}</div></div>`;
-      if (s.loading && items.length === 0) return `<div class="popup-col">${head}<div class="empty">Loading&hellip;</div></div>`;
-      if (items.length === 0) return `<div class="popup-col">${head}<div class="empty">No results</div></div>`;
-      const rows = items.map((h, j) => `
+  function ensurePopupSkeleton() {
+    if ($popup.dataset.ready) return;
+    $popup.innerHTML = engines.map((_, i) => `<div class="popup-col" data-eng="${i}"></div>`).join("");
+    $popup.dataset.ready = "1";
+  }
+  function ensureColumnsSkeleton() {
+    if ($columns.dataset.ready) return;
+    $columns.innerHTML = engines.map((_, i) => `<div class="col" data-eng="${i}"></div>`).join("");
+    $columns.dataset.ready = "1";
+  }
+
+  function renderEnginePopup(i) {
+    ensurePopupSkeleton();
+    const eng = engines[i];
+    const s = state[i];
+    const col = $popup.querySelector(`.popup-col[data-eng="${i}"]`);
+    if (!col) return;
+    const timing = s.lastMs != null ? `${s.lastMs} ms` : "";
+    const head = `<div class="popup-col-head"><span>${esc(eng.title)}</span><span class="timing">${timing}</span></div>`;
+    let body;
+    if (s.error) body = `<div class="error">${esc(s.error)}</div>`;
+    else if (s.loading && (!s.hits || s.hits.length === 0)) body = `<div class="empty">Loading&hellip;</div>`;
+    else if (!s.hits || s.hits.length === 0) body = `<div class="empty">No results</div>`;
+    else {
+      body = s.hits.slice(0, POPUP_LIMIT).map((h, j) => `
         <div class="popup-item" data-eng="${i}" data-idx="${j}" role="option">
           ${avatarHtml(pictureOf(h))}
           <div class="row-main">
@@ -263,27 +291,8 @@
           <div class="row-meta">${esc(fmt(eng.qualityOf(h, s.extra)))}</div>
         </div>
       `).join("");
-      return `<div class="popup-col">${head}${rows}</div>`;
-    }).join("");
-    $popup.classList.add("open");
-  }
-
-  function closePopup() {
-    $popup.classList.remove("open");
-    $popup.innerHTML = "";
-    activeKey = null;
-  }
-
-  function popupItems() { return Array.from($popup.querySelectorAll(".popup-item")); }
-  function setActive(idx) {
-    const items = popupItems();
-    if (items.length === 0) return;
-    if (idx < 0) idx = items.length - 1;
-    if (idx >= items.length) idx = 0;
-    items.forEach(el => el.classList.remove("active"));
-    items[idx].classList.add("active");
-    items[idx].scrollIntoView({ block: "nearest" });
-    activeKey = idx;
+    }
+    col.innerHTML = head + body;
   }
 
   function renderResult(eng, h, extra) {
@@ -301,7 +310,6 @@
         }
         return `<dt>${esc(k)}</dt><dd>${val}</dd>`;
       }).join("");
-
     const dn = h.display_name || h.displayName;
     return `
       <article class="result">
@@ -322,27 +330,45 @@
     `;
   }
 
-  function renderColumns(text) {
-    $columns.hidden = false;
-    $columns.innerHTML = engines.map((eng, i) => {
-      const s = state[i];
-      const head = `
-        <div class="col-head">
-          <div class="col-title">${esc(eng.title)}</div>
-          <div class="col-stats">${s.error ? "" : `${(s.hits||[]).length} of ${s.total ?? "?"} · ${s.lastMs ?? "?"} ms`}</div>
-        </div>`;
-      let body;
-      if (s.error) body = `<div class="error">${esc(s.error)}</div>`;
-      else if (s.loading) body = `<div class="empty">Searching&hellip;</div>`;
-      else if (!s.hits || s.hits.length === 0) body = `<div class="empty">No results.</div>`;
-      else body = s.hits.map(h => renderResult(eng, h, s.extra)).join("");
-      return `<div class="col">${head}${body}</div>`;
-    }).join("");
+  function renderEngineColumn(i) {
+    ensureColumnsSkeleton();
+    const eng = engines[i];
+    const s = state[i];
+    const col = $columns.querySelector(`.col[data-eng="${i}"]`);
+    if (!col) return;
+    const stats = s.error ? "" : `${(s.hits||[]).length} of ${s.total ?? "?"} · ${s.lastMs ?? "?"} ms`;
+    const head = `
+      <div class="col-head">
+        <div class="col-title">${esc(eng.title)}</div>
+        <div class="col-stats">${stats}</div>
+      </div>`;
+    let body;
+    if (s.error) body = `<div class="error">${esc(s.error)}</div>`;
+    else if (s.loading && (!s.hits || s.hits.length === 0)) body = `<div class="empty">Searching&hellip;</div>`;
+    else if (!s.hits || s.hits.length === 0) body = `<div class="empty">No results.</div>`;
+    else body = s.hits.map(h => renderResult(eng, h, s.extra)).join("");
+    col.innerHTML = head + body;
+  }
+
+  function openPopup() { ensurePopupSkeleton(); $popup.classList.add("open"); }
+  function closePopup() { $popup.classList.remove("open"); activeKey = null; }
+
+  function popupItems() { return Array.from($popup.querySelectorAll(".popup-item")); }
+  function setActive(idx) {
+    const items = popupItems();
+    if (items.length === 0) return;
+    if (idx < 0) idx = items.length - 1;
+    if (idx >= items.length) idx = 0;
+    items.forEach(el => el.classList.remove("active"));
+    items[idx].classList.add("active");
+    items[idx].scrollIntoView({ block: "nearest" });
+    activeKey = idx;
   }
 
   async function runEngine(i, text, mode) {
     const eng = engines[i];
     const s = state[i];
+    const myId = ++s.requestId;
     const abortKey = mode === "popup" ? "popupAbort" : "fullAbort";
     if (s[abortKey]) s[abortKey].abort();
     s[abortKey] = new AbortController();
@@ -351,13 +377,15 @@
     const limit = mode === "popup" ? POPUP_LIMIT : FULL_LIMIT;
     const t0 = performance.now();
     try {
-      const { hits, total, extra } = await eng.search(text, s[abortKey].signal, limit);
-      s.hits = hits;
-      s.total = total;
-      s.extra = extra;
+      const out = await eng.search(text, s[abortKey].signal, limit);
+      if (myId !== s.requestId) return null;
+      s.hits = out.hits;
+      s.total = out.total;
+      s.extra = out.extra;
       s.lastMs = Math.round(performance.now() - t0);
       s.loading = false;
     } catch (e) {
+      if (myId !== s.requestId) return null;
       if (e.name === "AbortError") return null;
       s.error = e.message || String(e);
       s.hits = [];
@@ -368,19 +396,31 @@
   }
 
   function runPopupSearch(text) {
-    engines.forEach((_, i) => { state[i].loading = true; state[i].error = null; });
-    renderPopup();
+    openPopup();
     engines.forEach((_, i) => {
-      runEngine(i, text, "popup").then(mode => { if (mode === "popup") renderPopup(); });
+      const s = state[i];
+      s.loading = true;
+      s.error = null;
+      renderEnginePopup(i);
+    });
+    engines.forEach((_, i) => {
+      runEngine(i, text, "popup").then(mode => { if (mode === "popup") renderEnginePopup(i); });
     });
   }
 
   function runFullSearch(text) {
     closePopup();
-    engines.forEach((_, i) => { state[i].loading = true; state[i].error = null; state[i].hits = []; });
-    renderColumns(text);
+    $columns.hidden = false;
+    ensureColumnsSkeleton();
     engines.forEach((_, i) => {
-      runEngine(i, text, "full").then(mode => { if (mode === "full") renderColumns(text); });
+      const s = state[i];
+      s.loading = true;
+      s.error = null;
+      s.hits = [];
+      renderEngineColumn(i);
+    });
+    engines.forEach((_, i) => {
+      runEngine(i, text, "full").then(mode => { if (mode === "full") renderEngineColumn(i); });
     });
   }
 
