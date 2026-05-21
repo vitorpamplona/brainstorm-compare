@@ -78,8 +78,17 @@
   }
   .result-header { display: flex; gap: 14px; align-items: center; margin-bottom: 10px; }
   .result-header .avatar { width: 56px; height: 56px; }
-  .result-name { font-size: 17px; font-weight: 600; margin: 0; }
+  .result-header .who { flex: 1; min-width: 0; }
+  .result-name { font-size: 17px; font-weight: 600; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .result-display { color: var(--muted); font-size: 13px; }
+  .quality {
+    flex-shrink: 0;
+    text-align: center;
+    line-height: 1;
+    padding-left: 12px;
+  }
+  .quality-num { font-size: 32px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .quality-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 4px; }
   .result-about { margin: 8px 0; }
   .banner { width: 100%; max-height: 160px; object-fit: cover; border-radius: 8px; margin: 8px 0; background: #eee; }
   .props { display: grid; grid-template-columns: 140px 1fr; gap: 4px 12px; font-size: 13px; margin-top: 8px; }
@@ -196,7 +205,7 @@
   }
 
   function renderResult(h) {
-    const SKIP = new Set(["sddocname","documentid","name","display_name","about","picture","banner","_relevance"]);
+    const SKIP = new Set(["sddocname","documentid","name","display_name","about","picture","banner","quality_score","_relevance"]);
     const props = Object.keys(h)
       .filter(k => !SKIP.has(k) && h[k] !== null && h[k] !== "")
       .map(k => {
@@ -216,9 +225,13 @@
       <article class="result">
         <div class="result-header">
           ${avatarHtml(h)}
-          <div>
+          <div class="who">
             <h2 class="result-name">${esc(h.name || h.display_name || "(unnamed)")}</h2>
             ${h.display_name && h.display_name !== h.name ? `<div class="result-display">${esc(h.display_name)}</div>` : ""}
+          </div>
+          <div class="quality">
+            <div class="quality-num">${h.quality_score ?? 0}</div>
+            <div class="quality-label">Quality</div>
           </div>
         </div>
         ${h.banner ? `<img class="banner" src="${esc(h.banner)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'" />` : ""}
