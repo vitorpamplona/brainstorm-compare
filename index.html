@@ -16,9 +16,9 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
-  .page { max-width: 720px; margin: 0 auto; padding: 0 16px; }
-  .hero { min-height: 40vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 12vh; }
-  .search-wrap { position: relative; width: 100%; max-width: 560px; }
+  .page { max-width: 1200px; margin: 0 auto; padding: 0 16px; }
+  .hero { min-height: 30vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 8vh; }
+  .search-wrap { position: relative; width: 100%; max-width: 720px; }
   #q {
     width: 100%;
     padding: 14px 18px;
@@ -31,6 +31,7 @@
     transition: border-color .15s, box-shadow .15s;
   }
   #q:focus { border-color: var(--accent); box-shadow: 0 1px 6px rgba(37,99,235,.15); }
+
   .popup {
     position: absolute;
     top: calc(100% + 6px);
@@ -39,64 +40,86 @@
     border: 1px solid var(--border);
     border-radius: 12px;
     box-shadow: 0 8px 24px rgba(0,0,0,.08);
-    max-height: 60vh;
-    overflow-y: auto;
     z-index: 10;
     display: none;
+    overflow: hidden;
   }
-  .popup.open { display: block; }
+  .popup.open { display: grid; grid-template-columns: 1fr 1fr; }
+  .popup-col { max-height: 60vh; overflow-y: auto; }
+  .popup-col + .popup-col { border-left: 1px solid #eee; }
+  .popup-col-head { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 8px 14px; background: #fafafa; border-bottom: 1px solid #eee; position: sticky; top: 0; display: flex; justify-content: space-between; }
+  .popup-col-head .timing { font-variant-numeric: tabular-nums; }
   .popup-item {
     display: flex;
-    gap: 12px;
-    padding: 10px 14px;
+    gap: 10px;
+    padding: 9px 12px;
     border-bottom: 1px solid #f0f0f0;
-    cursor: default;
     align-items: center;
   }
   .popup-item:last-child { border-bottom: 0; }
   .popup-item:hover, .popup-item.active { background: var(--hover); }
   .avatar {
-    width: 36px; height: 36px;
+    width: 34px; height: 34px;
     border-radius: 50%;
     background: #eee;
     object-fit: cover;
     flex-shrink: 0;
   }
   .row-main { flex: 1; min-width: 0; }
-  .row-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .row-about { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .row-meta { font-size: 12px; color: var(--muted); flex-shrink: 0; }
-  .meta-bar { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; padding: 16px 0 8px; }
-  .results { padding: 8px 0 48px; }
+  .row-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+  .row-about { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-meta { font-size: 12px; color: var(--muted); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+
+  .columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    padding: 16px 0 48px;
+  }
+  .col-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 8px 4px;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 12px;
+  }
+  .col-title { font-weight: 600; font-size: 15px; }
+  .col-stats { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
   .result {
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 10px;
-    padding: 16px;
-    margin-bottom: 12px;
+    padding: 14px;
+    margin-bottom: 10px;
   }
-  .result-header { display: flex; gap: 14px; align-items: center; margin-bottom: 10px; }
-  .result-header .avatar { width: 56px; height: 56px; }
+  .result-header { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
+  .result-header .avatar { width: 48px; height: 48px; }
   .result-header .who { flex: 1; min-width: 0; }
-  .result-name { font-size: 17px; font-weight: 600; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .result-display { color: var(--muted); font-size: 13px; }
+  .result-name { font-size: 16px; font-weight: 600; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .result-display { color: var(--muted); font-size: 12px; }
   .quality {
     flex-shrink: 0;
     text-align: center;
     line-height: 1;
-    padding-left: 12px;
+    padding-left: 10px;
   }
-  .quality-num { font-size: 32px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
-  .quality-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 4px; }
-  .result-about { margin: 8px 0; }
-  .props { display: grid; grid-template-columns: 140px 1fr; gap: 4px 12px; font-size: 13px; margin-top: 8px; }
+  .quality-num { font-size: 28px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .quality-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 3px; }
+  .result-about { margin: 6px 0; font-size: 13px; }
+  .props { display: grid; grid-template-columns: 110px 1fr; gap: 3px 10px; font-size: 12px; margin-top: 6px; }
   .props dt { color: var(--muted); }
   .props dd { margin: 0; word-break: break-all; }
   .props a { color: var(--accent); text-decoration: none; }
   .props a:hover { text-decoration: underline; }
-  .empty, .error { padding: 24px; text-align: center; color: var(--muted); }
+  .empty, .error { padding: 16px; text-align: center; color: var(--muted); font-size: 13px; }
   .error { color: #c00; }
-  .timing { font-variant-numeric: tabular-nums; }
+
+  @media (max-width: 720px) {
+    .popup.open, .columns { grid-template-columns: 1fr; }
+    .popup-col + .popup-col { border-left: 0; border-top: 1px solid #eee; }
+  }
 </style>
 </head>
 <body>
@@ -107,104 +130,126 @@
       <div id="popup" class="popup" role="listbox"></div>
     </div>
   </div>
-  <div id="meta" class="meta-bar" hidden></div>
-  <div id="results" class="results"></div>
+  <div id="columns" class="columns" hidden></div>
 </div>
 
 <script>
 (() => {
-  const API = "https://vespa-staging.nosfabrica.com/search";
   const POPUP_LIMIT = 8;
+  const FULL_LIMIT = 40;
   const DEBOUNCE_MS = 120;
+
+  const engines = [
+    {
+      id: "brainstorm",
+      title: "Brainstorm (Meili)",
+      search(text, signal, limit) {
+        const url = `https://brainstorm.world/api/search/profiles/meili?q=${encodeURIComponent(text)}&limit=${limit}&offset=0&wotPov=house`;
+        return fetch(url, { signal }).then(r => {
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return r.json();
+        }).then(d => ({
+          hits: d.hits || [],
+          total: d.estimatedTotalHits ?? (d.hits || []).length,
+          extra: { povSuffix: d.povSuffix },
+        }));
+      },
+      qualityOf(h, extra) {
+        const suffix = extra?.povSuffix;
+        if (suffix && h["wot_rank_" + suffix] != null) return h["wot_rank_" + suffix];
+        return h.wot_rank ?? 0;
+      },
+      qualityLabel: "WoT",
+      skipProps: new Set(["name","display_name","displayName","about","picture","banner","event_sig","event_id"]),
+    },
+    {
+      id: "vespa",
+      title: "Vespa",
+      search(text, signal, limit) {
+        return fetch("https://vespa-staging.nosfabrica.com/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query_text: text }),
+          signal,
+        }).then(r => {
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return r.json();
+        }).then(d => ({
+          hits: (d.hits || []).slice(0, limit),
+          total: d.total ?? (d.hits || []).length,
+          extra: {},
+        }));
+      },
+      qualityOf(h) { return h.quality_score ?? 0; },
+      qualityLabel: "Quality",
+      skipProps: new Set(["sddocname","documentid","name","display_name","about","picture","banner","quality_score","_relevance"]),
+    },
+  ];
 
   const $q = document.getElementById("q");
   const $popup = document.getElementById("popup");
-  const $meta = document.getElementById("meta");
-  const $results = document.getElementById("results");
+  const $columns = document.getElementById("columns");
 
-  let popupAbort = null;
-  let fullAbort = null;
+  const state = engines.map(() => ({ popupAbort: null, fullAbort: null, hits: [], extra: {} }));
   let debounceTimer = null;
-  let activeIdx = -1;
-  let popupHits = [];
+  let activeKey = null;
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+  const fmt = (n) => typeof n === "number" && !Number.isInteger(n) ? n.toFixed(2) : String(n);
 
-  function search(text, { signal, limit }) {
-    return fetch(API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query_text: text }),
-      signal,
-    }).then(r => {
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      return r.json();
-    });
-  }
-
-  function avatarHtml(hit) {
-    if (hit.picture) {
-      return `<img class="avatar" src="${esc(hit.picture)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'avatar'}))" />`;
-    }
+  function avatarHtml(pic) {
+    if (pic) return `<img class="avatar" src="${esc(pic)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'avatar'}))" />`;
     return `<div class="avatar"></div>`;
   }
 
-  function renderPopup(hits) {
-    popupHits = hits.slice(0, POPUP_LIMIT);
-    if (popupHits.length === 0) {
-      $popup.innerHTML = `<div class="empty">No results</div>`;
-      $popup.classList.add("open");
-      return;
-    }
-    $popup.innerHTML = popupHits.map((h, i) => `
-      <div class="popup-item" data-idx="${i}" role="option">
-        ${avatarHtml(h)}
-        <div class="row-main">
-          <div class="row-name">${esc(h.name || h.display_name || h.pubkey?.slice(0,16) || "(unnamed)")}</div>
-          <div class="row-about">${esc(h.about || h.display_name || "")}</div>
+  function nameOf(h) { return h.name || h.display_name || h.displayName || (h.pubkey && h.pubkey.slice(0,16)) || "(unnamed)"; }
+  function pictureOf(h) { return h.picture || ""; }
+  function aboutOf(h) { return h.about || ""; }
+
+  function renderPopup() {
+    $popup.innerHTML = engines.map((eng, i) => {
+      const s = state[i];
+      const items = s.hits.slice(0, POPUP_LIMIT);
+      const head = `<div class="popup-col-head"><span>${esc(eng.title)}</span><span class="timing">${s.lastMs != null ? s.lastMs + " ms" : ""}</span></div>`;
+      if (s.error) return `<div class="popup-col">${head}<div class="error">${esc(s.error)}</div></div>`;
+      if (s.loading && items.length === 0) return `<div class="popup-col">${head}<div class="empty">Loading&hellip;</div></div>`;
+      if (items.length === 0) return `<div class="popup-col">${head}<div class="empty">No results</div></div>`;
+      const rows = items.map((h, j) => `
+        <div class="popup-item" data-eng="${i}" data-idx="${j}" role="option">
+          ${avatarHtml(pictureOf(h))}
+          <div class="row-main">
+            <div class="row-name">${esc(nameOf(h))}</div>
+            <div class="row-about">${esc(aboutOf(h))}</div>
+          </div>
+          <div class="row-meta">${esc(fmt(eng.qualityOf(h, s.extra)))}</div>
         </div>
-        <div class="row-meta">★ ${h.quality_score ?? 0}</div>
-      </div>
-    `).join("");
+      `).join("");
+      return `<div class="popup-col">${head}${rows}</div>`;
+    }).join("");
     $popup.classList.add("open");
-    activeIdx = -1;
   }
 
   function closePopup() {
     $popup.classList.remove("open");
     $popup.innerHTML = "";
-    activeIdx = -1;
+    activeKey = null;
   }
 
+  function popupItems() { return Array.from($popup.querySelectorAll(".popup-item")); }
   function setActive(idx) {
-    const items = $popup.querySelectorAll(".popup-item");
+    const items = popupItems();
     if (items.length === 0) return;
     if (idx < 0) idx = items.length - 1;
     if (idx >= items.length) idx = 0;
     items.forEach(el => el.classList.remove("active"));
     items[idx].classList.add("active");
     items[idx].scrollIntoView({ block: "nearest" });
-    activeIdx = idx;
+    activeKey = idx;
   }
 
-  function renderFullResults(text, data, elapsedMs) {
-    const hits = data.hits || [];
-    $meta.hidden = false;
-    $meta.innerHTML = `
-      <span>${hits.length} of ${data.total ?? hits.length} results for <strong>${esc(text)}</strong></span>
-      <span class="timing">${elapsedMs} ms</span>
-    `;
-    if (hits.length === 0) {
-      $results.innerHTML = `<div class="empty">No results.</div>`;
-      return;
-    }
-    $results.innerHTML = hits.map(h => renderResult(h)).join("");
-  }
-
-  function renderResult(h) {
-    const SKIP = new Set(["sddocname","documentid","name","display_name","about","picture","banner","quality_score","_relevance"]);
-    const props = Object.keys(h)
-      .filter(k => !SKIP.has(k) && h[k] !== null && h[k] !== "")
+  function renderResult(eng, h, extra) {
+    const propEntries = Object.keys(h)
+      .filter(k => !eng.skipProps.has(k) && !k.startsWith("wot_") && h[k] !== null && h[k] !== "" && h[k] !== undefined)
       .map(k => {
         const v = h[k];
         let val;
@@ -213,67 +258,98 @@
         } else if (typeof v === "object") {
           val = `<code>${esc(JSON.stringify(v))}</code>`;
         } else {
-          val = esc(v);
+          val = esc(fmt(v));
         }
         return `<dt>${esc(k)}</dt><dd>${val}</dd>`;
       }).join("");
 
+    const dn = h.display_name || h.displayName;
     return `
       <article class="result">
         <div class="result-header">
-          ${avatarHtml(h)}
+          ${avatarHtml(pictureOf(h))}
           <div class="who">
-            <h2 class="result-name">${esc(h.name || h.display_name || "(unnamed)")}</h2>
-            ${h.display_name && h.display_name !== h.name ? `<div class="result-display">${esc(h.display_name)}</div>` : ""}
+            <h2 class="result-name">${esc(nameOf(h))}</h2>
+            ${dn && dn !== h.name ? `<div class="result-display">${esc(dn)}</div>` : ""}
           </div>
           <div class="quality">
-            <div class="quality-num">${h.quality_score ?? 0}</div>
-            <div class="quality-label">Quality</div>
+            <div class="quality-num">${esc(fmt(eng.qualityOf(h, extra)))}</div>
+            <div class="quality-label">${esc(eng.qualityLabel)}</div>
           </div>
         </div>
-        ${h.about ? `<div class="result-about">${esc(h.about)}</div>` : ""}
-        <dl class="props">${props}</dl>
+        ${aboutOf(h) ? `<div class="result-about">${esc(aboutOf(h))}</div>` : ""}
+        <dl class="props">${propEntries}</dl>
       </article>
     `;
   }
 
-  async function runPopupSearch(text) {
-    if (popupAbort) popupAbort.abort();
-    popupAbort = new AbortController();
-    try {
-      const data = await search(text, { signal: popupAbort.signal, limit: POPUP_LIMIT });
-      renderPopup(data.hits || []);
-    } catch (e) {
-      if (e.name !== "AbortError") {
-        $popup.innerHTML = `<div class="error">Error: ${esc(e.message)}</div>`;
-        $popup.classList.add("open");
-      }
-    }
+  function renderColumns(text) {
+    $columns.hidden = false;
+    $columns.innerHTML = engines.map((eng, i) => {
+      const s = state[i];
+      const head = `
+        <div class="col-head">
+          <div class="col-title">${esc(eng.title)}</div>
+          <div class="col-stats">${s.error ? "" : `${(s.hits||[]).length} of ${s.total ?? "?"} · ${s.lastMs ?? "?"} ms`}</div>
+        </div>`;
+      let body;
+      if (s.error) body = `<div class="error">${esc(s.error)}</div>`;
+      else if (s.loading) body = `<div class="empty">Searching&hellip;</div>`;
+      else if (!s.hits || s.hits.length === 0) body = `<div class="empty">No results.</div>`;
+      else body = s.hits.map(h => renderResult(eng, h, s.extra)).join("");
+      return `<div class="col">${head}${body}</div>`;
+    }).join("");
   }
 
-  async function runFullSearch(text) {
-    if (fullAbort) fullAbort.abort();
-    fullAbort = new AbortController();
-    closePopup();
-    $meta.hidden = false;
-    $meta.innerHTML = `<span>Searching for <strong>${esc(text)}</strong>&hellip;</span>`;
-    $results.innerHTML = "";
+  async function runEngine(i, text, mode) {
+    const eng = engines[i];
+    const s = state[i];
+    const abortKey = mode === "popup" ? "popupAbort" : "fullAbort";
+    if (s[abortKey]) s[abortKey].abort();
+    s[abortKey] = new AbortController();
+    s.loading = true;
+    s.error = null;
+    const limit = mode === "popup" ? POPUP_LIMIT : FULL_LIMIT;
     const t0 = performance.now();
     try {
-      const data = await search(text, { signal: fullAbort.signal });
-      renderFullResults(text, data, Math.round(performance.now() - t0));
+      const { hits, total, extra } = await eng.search(text, s[abortKey].signal, limit);
+      s.hits = hits;
+      s.total = total;
+      s.extra = extra;
+      s.lastMs = Math.round(performance.now() - t0);
+      s.loading = false;
     } catch (e) {
-      if (e.name !== "AbortError") {
-        $results.innerHTML = `<div class="error">Error: ${esc(e.message)}</div>`;
-      }
+      if (e.name === "AbortError") return null;
+      s.error = e.message || String(e);
+      s.hits = [];
+      s.lastMs = Math.round(performance.now() - t0);
+      s.loading = false;
     }
+    return mode;
+  }
+
+  function runPopupSearch(text) {
+    engines.forEach((_, i) => { state[i].loading = true; state[i].error = null; });
+    renderPopup();
+    engines.forEach((_, i) => {
+      runEngine(i, text, "popup").then(mode => { if (mode === "popup") renderPopup(); });
+    });
+  }
+
+  function runFullSearch(text) {
+    closePopup();
+    engines.forEach((_, i) => { state[i].loading = true; state[i].error = null; state[i].hits = []; });
+    renderColumns(text);
+    engines.forEach((_, i) => {
+      runEngine(i, text, "full").then(mode => { if (mode === "full") renderColumns(text); });
+    });
   }
 
   $q.addEventListener("input", () => {
     const text = $q.value.trim();
     clearTimeout(debounceTimer);
     if (!text) {
-      if (popupAbort) popupAbort.abort();
+      engines.forEach((_, i) => { if (state[i].popupAbort) state[i].popupAbort.abort(); });
       closePopup();
       return;
     }
@@ -285,15 +361,11 @@
       e.preventDefault();
       const text = $q.value.trim();
       if (!text) return;
-      if (activeIdx >= 0 && popupHits[activeIdx]) {
-        const h = popupHits[activeIdx];
-        $q.value = h.name || h.display_name || $q.value;
-      }
-      runFullSearch($q.value.trim());
+      runFullSearch(text);
     } else if (e.key === "ArrowDown") {
-      if ($popup.classList.contains("open")) { e.preventDefault(); setActive(activeIdx + 1); }
+      if ($popup.classList.contains("open")) { e.preventDefault(); setActive((activeKey ?? -1) + 1); }
     } else if (e.key === "ArrowUp") {
-      if ($popup.classList.contains("open")) { e.preventDefault(); setActive(activeIdx - 1); }
+      if ($popup.classList.contains("open")) { e.preventDefault(); setActive((activeKey ?? popupItems().length) - 1); }
     } else if (e.key === "Escape") {
       closePopup();
     }
@@ -303,10 +375,11 @@
     const item = e.target.closest(".popup-item");
     if (!item) return;
     e.preventDefault();
-    const idx = Number(item.dataset.idx);
-    const h = popupHits[idx];
+    const i = Number(item.dataset.eng);
+    const j = Number(item.dataset.idx);
+    const h = state[i].hits[j];
     if (h) {
-      $q.value = h.name || h.display_name || $q.value;
+      $q.value = nameOf(h);
       runFullSearch($q.value.trim());
     }
   });
@@ -316,7 +389,7 @@
   });
 
   $q.addEventListener("focus", () => {
-    if (popupHits.length > 0 && $q.value.trim()) $popup.classList.add("open");
+    if (state.some(s => s.hits && s.hits.length > 0) && $q.value.trim()) $popup.classList.add("open");
   });
 })();
 </script>
