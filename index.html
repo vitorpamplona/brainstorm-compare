@@ -168,7 +168,6 @@
   const POPUP_LIMIT = 8;
   const FULL_LIMIT = 40;
   const DEBOUNCE_MS = 120;
-  const CACHE_MAX = 50;
 
   const VESPA_WEIGHT_DEFAULTS = {
     w_name: 3,
@@ -196,7 +195,6 @@
           extra: { povSuffix: d.povSuffix },
         }));
       },
-      cacheKey(text, limit) { return `${text}|${limit}`; },
       qualityOf(h, extra) {
         const suffix = extra?.povSuffix;
         if (suffix && h["wot_rank_" + suffix] != null) return h["wot_rank_" + suffix];
@@ -223,9 +221,6 @@
           extra: {},
         }));
       },
-      cacheKey(text) {
-        return `${text}|${Object.values(vespaWeights).join(",")}`;
-      },
       qualityOf(h) { return h.quality_score ?? 0; },
       qualityLabel: "Quality",
       skipProps: new Set(["sddocname","documentid","name","display_name","about","picture","banner","quality_score","_relevance"]),
@@ -246,25 +241,9 @@
     lastMs: null,
     loading: false,
     error: null,
-    cached: false,
   }));
-  const caches = engines.map(() => new Map());
   let debounceTimer = null;
   let activeKey = null;
-
-  function cacheGet(i, key) {
-    const m = caches[i];
-    if (!m.has(key)) return undefined;
-    const v = m.get(key);
-    m.delete(key); m.set(key, v);
-    return v;
-  }
-  function cacheSet(i, key, v) {
-    const m = caches[i];
-    if (m.has(key)) m.delete(key);
-    m.set(key, v);
-    if (m.size > CACHE_MAX) m.delete(m.keys().next().value);
-  }
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
   const fmt = (n) => typeof n === "number" && !Number.isInteger(n) ? n.toFixed(2) : String(n);
@@ -295,7 +274,7 @@
     const s = state[i];
     const col = $popup.querySelector(`.popup-col[data-eng="${i}"]`);
     if (!col) return;
-    const timing = s.lastMs != null ? `${s.lastMs} ms${s.cached ? " · cached" : ""}` : "";
+    const timing = s.lastMs != null ? `${s.lastMs} ms` : "";
     const head = `<div class="popup-col-head"><span>${esc(eng.title)}</span><span class="timing">${timing}</span></div>`;
     let body;
     if (s.error) body = `<div class="error">${esc(s.error)}</div>`;
@@ -357,7 +336,7 @@
     const s = state[i];
     const col = $columns.querySelector(`.col[data-eng="${i}"]`);
     if (!col) return;
-    const stats = s.error ? "" : `${(s.hits||[]).length} of ${s.total ?? "?"} · ${s.lastMs ?? "?"} ms${s.cached ? " · cached" : ""}`;
+    const stats = s.error ? "" : `${(s.hits||[]).length} of ${s.total ?? "?"} · ${s.lastMs ?? "?"} ms`;
     const head = `
       <div class="col-head">
         <div class="col-title">${esc(eng.title)}</div>
@@ -395,25 +374,11 @@
     s[abortKey] = new AbortController();
     s.loading = true;
     s.error = null;
-    s.cached = false;
     const limit = mode === "popup" ? POPUP_LIMIT : FULL_LIMIT;
-    const ckey = eng.cacheKey(text, limit);
     const t0 = performance.now();
-    const cached = cacheGet(i, ckey);
-    if (cached) {
-      if (myId !== s.requestId) return null;
-      s.hits = cached.hits;
-      s.total = cached.total;
-      s.extra = cached.extra;
-      s.lastMs = Math.round(performance.now() - t0);
-      s.cached = true;
-      s.loading = false;
-      return mode;
-    }
     try {
       const out = await eng.search(text, s[abortKey].signal, limit);
       if (myId !== s.requestId) return null;
-      cacheSet(i, ckey, out);
       s.hits = out.hits;
       s.total = out.total;
       s.extra = out.extra;
