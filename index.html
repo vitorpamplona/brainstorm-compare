@@ -19,6 +19,26 @@
   .page { max-width: 1200px; margin: 0 auto; padding: 0 16px; }
   .hero { min-height: 30vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 8vh; }
   .search-wrap { position: relative; width: 100%; max-width: 720px; }
+  .weights {
+    width: 100%;
+    max-width: 720px;
+    margin-bottom: 14px;
+    padding: 10px 14px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 12px;
+  }
+  .weights-head { display: flex; justify-content: space-between; align-items: center; color: var(--muted); margin-bottom: 8px; }
+  .weights-head .title { font-weight: 600; color: var(--fg); }
+  .weights-reset { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; font-size: 11px; cursor: pointer; color: var(--muted); }
+  .weights-reset:hover { background: var(--hover); color: var(--accent); border-color: var(--accent); }
+  .weights-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 12px; }
+  .weights-grid label { display: flex; flex-direction: column; gap: 2px; }
+  .weights-grid label span { color: var(--muted); font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .weights-grid input { width: 100%; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; font: inherit; font-variant-numeric: tabular-nums; }
+  .weights-grid input:focus { outline: none; border-color: var(--accent); }
+  @media (max-width: 560px) { .weights-grid { grid-template-columns: repeat(2, 1fr); } }
   #q {
     width: 100%;
     padding: 14px 18px;
@@ -126,6 +146,13 @@
 <body>
 <div class="page">
   <div class="hero">
+    <div class="weights">
+      <div class="weights-head">
+        <span class="title">Vespa weights</span>
+        <button type="button" class="weights-reset" id="weights-reset">Reset</button>
+      </div>
+      <div class="weights-grid" id="weights-grid"></div>
+    </div>
     <div class="search-wrap">
       <input id="q" type="text" autocomplete="off" spellcheck="false" placeholder="Type to search&hellip;" autofocus />
       <div id="popup" class="popup" role="listbox"></div>
@@ -139,6 +166,17 @@
   const POPUP_LIMIT = 8;
   const FULL_LIMIT = 40;
   const DEBOUNCE_MS = 120;
+
+  const VESPA_WEIGHT_DEFAULTS = {
+    w_name: 3,
+    w_display_name: 0,
+    w_about: 1.0,
+    w_name_gram: 0.5,
+    w_display_name_gram: 0,
+    w_pubkey_gram: 0.1,
+    w_quality: 1.0,
+  };
+  const vespaWeights = { ...VESPA_WEIGHT_DEFAULTS };
 
   const engines = [
     {
@@ -170,7 +208,7 @@
         return fetch("https://vespa-staging.nosfabrica.com/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query_text: text }),
+          body: JSON.stringify({ query_text: text, ...vespaWeights }),
           signal,
         }).then(r => {
           if (!r.ok) throw new Error("HTTP " + r.status);
@@ -391,6 +429,43 @@
 
   $q.addEventListener("focus", () => {
     if (state.some(s => s.hits && s.hits.length > 0) && $q.value.trim()) $popup.classList.add("open");
+  });
+
+  const $grid = document.getElementById("weights-grid");
+  const $reset = document.getElementById("weights-reset");
+
+  function buildWeights() {
+    $grid.innerHTML = Object.keys(VESPA_WEIGHT_DEFAULTS).map(k => `
+      <label>
+        <span>${esc(k)}</span>
+        <input type="number" step="0.1" data-key="${esc(k)}" value="${vespaWeights[k]}" />
+      </label>
+    `).join("");
+  }
+  buildWeights();
+
+  function onWeightChange() {
+    const text = $q.value.trim();
+    if (!text) return;
+    if ($columns.hidden === false) runFullSearch(text);
+    else runPopupSearch(text);
+  }
+
+  $grid.addEventListener("input", (e) => {
+    const t = e.target;
+    if (!(t instanceof HTMLInputElement)) return;
+    const k = t.dataset.key;
+    const v = parseFloat(t.value);
+    if (!Number.isFinite(v)) return;
+    vespaWeights[k] = v;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(onWeightChange, DEBOUNCE_MS);
+  });
+
+  $reset.addEventListener("click", () => {
+    Object.assign(vespaWeights, VESPA_WEIGHT_DEFAULTS);
+    buildWeights();
+    onWeightChange();
   });
 })();
 </script>
