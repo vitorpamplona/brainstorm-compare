@@ -185,9 +185,9 @@
           extra: {},
         }));
       },
-      qualityOf(h) { return h.quality_score ?? 0; },
+      qualityOf(h) { return h.matchfeatures?.user_score ?? 0; },
       qualityLabel: "Quality",
-      skipProps: new Set(["sddocname","documentid","name","display_name","about","picture","banner","quality_score","_relevance"]),
+      skipProps: new Set(["sddocname","documentid","name","display_name","about","picture","banner","quality_score","matchfeatures","_relevance"]),
     },
   ];
 
