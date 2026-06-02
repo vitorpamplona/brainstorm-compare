@@ -46,7 +46,7 @@
     display: none;
     overflow: hidden;
   }
-  .popup.open { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .popup.open { display: grid; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); }
   .popup-col { max-height: 60vh; overflow-y: auto; }
   .popup-col + .popup-col { border-left: 1px solid #eee; }
   .popup-col-head { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 8px 14px; background: #fafafa; border-bottom: 1px solid #eee; position: sticky; top: 0; display: flex; justify-content: space-between; }
@@ -74,7 +74,7 @@
 
   .columns {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr));
     gap: 16px;
     padding: 16px 0 48px;
   }
@@ -119,8 +119,8 @@
   .empty, .error { padding: 16px; text-align: center; color: var(--muted); font-size: 13px; }
   .error { color: #c00; }
 
-  @media (max-width: 720px) {
-    .popup.open, .columns { grid-template-columns: minmax(0, 1fr); }
+  @media (max-width: 960px) {
+    .popup.open, .columns { --cols: 1 !important; }
     .popup-col + .popup-col { border-left: 0; border-top: 1px solid #eee; }
   }
 </style>
@@ -143,6 +143,36 @@
   const DEBOUNCE_MS = 120;
 
   const VESPA_USER_PUBKEY = "be7bf5de068c1d842ed34a7c270507ec940f5ea51671cfd062a95e9d09420d0a";
+
+  // Resolve the signed-in user's pubkey from a NIP-07 Nostr extension, once.
+  let userPubkeyPromise = null;
+  function getUserPubkey() {
+    if (!userPubkeyPromise) {
+      userPubkeyPromise = (window.nostr && window.nostr.getPublicKey)
+        ? Promise.resolve(window.nostr.getPublicKey())
+        : Promise.reject(new Error("No Nostr extension found (window.nostr)"));
+      // Allow a later retry if the extension is missing or the user declined.
+      userPubkeyPromise.catch(() => { userPubkeyPromise = null; });
+    }
+    return userPubkeyPromise;
+  }
+
+  function vespaSearch(text, signal, limit, observerPubkey) {
+    const url = `https://brainstormserver-staging.nosfabrica.com/search/byText?text=${encodeURIComponent(text)}&onlyRanked=true&observerPubkey=${observerPubkey}`;
+    return fetch(url, { signal }).then(r => {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }).then(d => {
+      const results = (d.data && d.data.results) || [];
+      return {
+        hits: results.slice(0, limit),
+        total: d.data?.numResults ?? results.length,
+        extra: {},
+      };
+    });
+  }
+
+  const VESPA_SKIP_PROPS = ["sddocname","documentid","name","display_name","about","picture","banner","_relevance","_quality_score"];
 
   const engines = [
     {
@@ -171,22 +201,21 @@
       id: "vespa",
       title: "Vespa",
       search(text, signal, limit) {
-        const url = `https://brainstormserver-staging.nosfabrica.com/search/byText?text=${encodeURIComponent(text)}&onlyRanked=true&observerPubkey=${VESPA_USER_PUBKEY}`;
-        return fetch(url, { signal }).then(r => {
-          if (!r.ok) throw new Error("HTTP " + r.status);
-          return r.json();
-        }).then(d => {
-          const results = (d.data && d.data.results) || [];
-          return {
-            hits: results.slice(0, limit),
-            total: d.data?.numResults ?? results.length,
-            extra: {},
-          };
-        });
+        return vespaSearch(text, signal, limit, VESPA_USER_PUBKEY);
       },
       qualityOf(h) { return h._quality_score ?? 0; },
       qualityLabel: "Quality",
-      skipProps: new Set(["sddocname","documentid","name","display_name","about","picture","banner","_relevance","_quality_score"]),
+      skipProps: new Set(VESPA_SKIP_PROPS),
+    },
+    {
+      id: "vespa-you",
+      title: "Vespa (You)",
+      search(text, signal, limit) {
+        return getUserPubkey().then(pk => vespaSearch(text, signal, limit, pk));
+      },
+      qualityOf(h) { return h._quality_score ?? 0; },
+      qualityLabel: "Quality",
+      skipProps: new Set(VESPA_SKIP_PROPS),
     },
   ];
 
@@ -222,11 +251,13 @@
 
   function ensurePopupSkeleton() {
     if ($popup.dataset.ready) return;
+    $popup.style.setProperty("--cols", engines.length);
     $popup.innerHTML = engines.map((_, i) => `<div class="popup-col" data-eng="${i}"></div>`).join("");
     $popup.dataset.ready = "1";
   }
   function ensureColumnsSkeleton() {
     if ($columns.dataset.ready) return;
+    $columns.style.setProperty("--cols", engines.length);
     $columns.innerHTML = engines.map((_, i) => `<div class="col" data-eng="${i}"></div>`).join("");
     $columns.dataset.ready = "1";
   }
