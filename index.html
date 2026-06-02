@@ -144,19 +144,6 @@
 
   const VESPA_BASE = "https://brainstormserver-staging.nosfabrica.com";
 
-  // Resolve the signed-in user's pubkey from a NIP-07 Nostr extension, once.
-  let userPubkeyPromise = null;
-  function getUserPubkey() {
-    if (!userPubkeyPromise) {
-      userPubkeyPromise = (window.nostr && window.nostr.getPublicKey)
-        ? Promise.resolve(window.nostr.getPublicKey())
-        : Promise.reject(new Error("No Nostr extension found (window.nostr)"));
-      // Allow a later retry if the extension is missing or the user declined.
-      userPubkeyPromise.catch(() => { userPubkeyPromise = null; });
-    }
-    return userPubkeyPromise;
-  }
-
   // Acquire (and cache) a Brainstorm JWT for the signed-in user via the NIP-07
   // signer. The challenge is signed once per token lifetime — not per request —
   // so type-ahead searches reuse the token instead of prompting the extension.
@@ -172,7 +159,7 @@
         if (!(window.nostr && window.nostr.signEvent)) {
           throw new Error("No Nostr extension found (window.nostr)");
         }
-        const pubkey = await getUserPubkey();
+        const pubkey = await window.nostr.getPublicKey();
         const chRes = await fetch(`${VESPA_BASE}/authChallenge/${pubkey}`);
         if (!chRes.ok) throw new Error("Auth challenge failed: HTTP " + chRes.status);
         const challenge = (await chRes.json())?.data?.challenge;
@@ -222,7 +209,7 @@
     });
   }
 
-  const VESPA_SKIP_PROPS = ["sddocname","documentid","name","display_name","about","picture","banner","_relevance","_quality_score"];
+  const VESPA_SKIP = new Set(["sddocname","documentid","name","display_name","about","picture","banner","_relevance","_quality_score"]);
 
   const engines = [
     {
@@ -255,7 +242,7 @@
       },
       qualityOf(h) { return h._quality_score ?? 0; },
       qualityLabel: "Quality",
-      skipProps: new Set(VESPA_SKIP_PROPS),
+      skipProps: VESPA_SKIP,
     },
     {
       id: "vespa-you",
@@ -273,7 +260,7 @@
       },
       qualityOf(h) { return h._quality_score ?? 0; },
       qualityLabel: "Quality",
-      skipProps: new Set(VESPA_SKIP_PROPS),
+      skipProps: VESPA_SKIP,
     },
   ];
 
@@ -307,17 +294,22 @@
   function pictureOf(h) { return h.picture || ""; }
   function aboutOf(h) { return h.about || ""; }
 
-  function ensurePopupSkeleton() {
-    if ($popup.dataset.ready) return;
-    $popup.style.setProperty("--cols", engines.length);
-    $popup.innerHTML = engines.map((_, i) => `<div class="popup-col" data-eng="${i}"></div>`).join("");
-    $popup.dataset.ready = "1";
+  function ensureSkeleton(el, childClass) {
+    if (el.dataset.ready) return;
+    el.style.setProperty("--cols", engines.length);
+    el.innerHTML = engines.map((_, i) => `<div class="${childClass}" data-eng="${i}"></div>`).join("");
+    el.dataset.ready = "1";
   }
-  function ensureColumnsSkeleton() {
-    if ($columns.dataset.ready) return;
-    $columns.style.setProperty("--cols", engines.length);
-    $columns.innerHTML = engines.map((_, i) => `<div class="col" data-eng="${i}"></div>`).join("");
-    $columns.dataset.ready = "1";
+  function ensurePopupSkeleton() { ensureSkeleton($popup, "popup-col"); }
+  function ensureColumnsSkeleton() { ensureSkeleton($columns, "col"); }
+
+  // Shared error/loading/empty markup for both views; returns null when there
+  // are hits to render, leaving the body to the caller.
+  function statusBody(s, loadingText) {
+    if (s.error) return `<div class="error">${esc(s.error)}</div>`;
+    if (s.loading && !s.hits?.length) return `<div class="empty">${loadingText}</div>`;
+    if (!s.hits?.length) return `<div class="empty">No results</div>`;
+    return null;
   }
 
   function renderEnginePopup(i) {
@@ -331,11 +323,8 @@
     const timing = s.lastMs != null ? `${s.lastMs} ms` : "";
     const meta = [countText, timing].filter(Boolean).join(" · ");
     const head = `<div class="popup-col-head"><span>${esc(eng.title)}</span><span class="timing">${meta}</span></div>`;
-    let body;
-    if (s.error) body = `<div class="error">${esc(s.error)}</div>`;
-    else if (s.loading && (!s.hits || s.hits.length === 0)) body = `<div class="empty">Loading&hellip;</div>`;
-    else if (!s.hits || s.hits.length === 0) body = `<div class="empty">No results</div>`;
-    else {
+    let body = statusBody(s, "Loading&hellip;");
+    if (body === null) {
       body = s.hits.slice(0, POPUP_LIMIT).map((h, j) => `
         <div class="popup-item" data-eng="${i}" data-idx="${j}" role="option">
           ${avatarHtml(pictureOf(h))}
@@ -397,11 +386,8 @@
         <div class="col-title">${esc(eng.title)}</div>
         <div class="col-stats">${stats}</div>
       </div>`;
-    let body;
-    if (s.error) body = `<div class="error">${esc(s.error)}</div>`;
-    else if (s.loading && (!s.hits || s.hits.length === 0)) body = `<div class="empty">Searching&hellip;</div>`;
-    else if (!s.hits || s.hits.length === 0) body = `<div class="empty">No results.</div>`;
-    else body = s.hits.map(h => renderResult(eng, h, s.extra)).join("");
+    const body = statusBody(s, "Searching&hellip;")
+      ?? s.hits.map(h => renderResult(eng, h, s.extra)).join("");
     col.innerHTML = head + body;
   }
 
@@ -453,13 +439,9 @@
   function runPopupSearch(text) {
     openPopup();
     engines.forEach((_, i) => {
-      const s = state[i];
-      s.loading = true;
-      s.error = null;
+      Object.assign(state[i], { loading: true, error: null });
       renderEnginePopup(i);
-    });
-    engines.forEach((_, i) => {
-      runEngine(i, text, "popup").then(mode => { if (mode === "popup") renderEnginePopup(i); });
+      runEngine(i, text, "popup").then(m => { if (m) renderEnginePopup(i); });
     });
   }
 
@@ -468,14 +450,9 @@
     $columns.hidden = false;
     ensureColumnsSkeleton();
     engines.forEach((_, i) => {
-      const s = state[i];
-      s.loading = true;
-      s.error = null;
-      s.hits = [];
+      Object.assign(state[i], { loading: true, error: null, hits: [] });
       renderEngineColumn(i);
-    });
-    engines.forEach((_, i) => {
-      runEngine(i, text, "full").then(mode => { if (mode === "full") renderEngineColumn(i); });
+      runEngine(i, text, "full").then(m => { if (m) renderEngineColumn(i); });
     });
   }
 
