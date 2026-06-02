@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Search</title>
-<link rel="preconnect" href="https://vespa-staging.nosfabrica.com" crossorigin />
+<link rel="preconnect" href="https://brainstormserver-staging.nosfabrica.com" crossorigin />
 <link rel="preconnect" href="https://brainstorm.world" crossorigin />
 <style>
   :root {
@@ -158,27 +158,21 @@
   }
 
   function vespaSearch(text, signal, limit, observerPubkey) {
-    return fetch("https://vespa-staging.nosfabrica.com/search_quality", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query_text: text,
-        user_pubkey: observerPubkey,
-        hits: limit,
-        include_zero_score_results: false,
-      }),
-      signal,
-    }).then(r => {
+    const url = `https://brainstormserver-staging.nosfabrica.com/search/byText?text=${encodeURIComponent(text)}&onlyRanked=true&observerPubkey=${observerPubkey}`;
+    return fetch(url, { signal }).then(r => {
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.json();
-    }).then(d => ({
-      hits: d.hits || [],
-      total: d.total ?? (d.hits || []).length,
-      extra: {},
-    }));
+    }).then(d => {
+      const results = (d.data && d.data.results) || [];
+      return {
+        hits: results.slice(0, limit),
+        total: d.data?.numResults ?? results.length,
+        extra: {},
+      };
+    });
   }
 
-  const VESPA_SKIP_PROPS = ["sddocname","documentid","name","display_name","about","picture","banner","quality_score","matchfeatures","_relevance"];
+  const VESPA_SKIP_PROPS = ["sddocname","documentid","name","display_name","about","picture","banner","_relevance","_quality_score"];
 
   const engines = [
     {
@@ -209,7 +203,7 @@
       search(text, signal, limit) {
         return vespaSearch(text, signal, limit, VESPA_USER_PUBKEY);
       },
-      qualityOf(h) { return h.matchfeatures?.user_score ?? 0; },
+      qualityOf(h) { return h._quality_score ?? 0; },
       qualityLabel: "Quality",
       skipProps: new Set(VESPA_SKIP_PROPS),
     },
@@ -219,7 +213,7 @@
       search(text, signal, limit) {
         return getUserPubkey().then(pk => vespaSearch(text, signal, limit, pk));
       },
-      qualityOf(h) { return h.matchfeatures?.user_score ?? 0; },
+      qualityOf(h) { return h._quality_score ?? 0; },
       qualityLabel: "Quality",
       skipProps: new Set(VESPA_SKIP_PROPS),
     },
