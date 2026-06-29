@@ -124,7 +124,7 @@
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    margin-top: 16px;
+    margin-bottom: 18px;
     cursor: pointer;
     user-select: none;
   }
@@ -161,10 +161,6 @@
 <body>
 <div class="page">
   <div class="hero">
-    <div class="search-wrap">
-      <input id="q" type="text" autocomplete="off" spellcheck="false" placeholder="Type to search&hellip;" autofocus />
-      <div id="popup" class="popup" role="listbox"></div>
-    </div>
     <label class="toggle" title="Rank every column from your own Web of Trust instead of the house key">
       <input id="observer" type="checkbox" />
       <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -173,6 +169,10 @@
         <span class="toggle-sub">Rank all columns by your Web of Trust (needs a Nostr extension). Off = house key.</span>
       </span>
     </label>
+    <div class="search-wrap">
+      <input id="q" type="text" autocomplete="off" spellcheck="false" placeholder="Type to search&hellip;" autofocus />
+      <div id="popup" class="popup" role="listbox"></div>
+    </div>
   </div>
   <div id="columns" class="columns" hidden></div>
 </div>
@@ -338,8 +338,8 @@
       qualityLabel: "WoT",
       skipProps: new Set(["name","display_name","displayName","about","picture","banner","event_sig","event_id","id","created_at","updated_at","indexed_at"]),
     },
-    brainstormEngine("brainstorm-prod", "Brainstorm (Production)", BRAINSTORM_PROD_BASE),
-    brainstormEngine("brainstorm-staging", "Brainstorm (Staging)", BRAINSTORM_STAGING_BASE),
+    brainstormEngine("brainstorm-prod", "Brainstorm (Prod)", BRAINSTORM_PROD_BASE),
+    brainstormEngine("brainstorm-staging", "Brainstorm (Stag)", BRAINSTORM_STAGING_BASE),
   ];
 
   const $q = document.getElementById("q");
