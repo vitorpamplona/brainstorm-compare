@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Search</title>
+<link rel="preconnect" href="https://brainstormserver.nosfabrica.com" crossorigin />
 <link rel="preconnect" href="https://brainstormserver-staging.nosfabrica.com" crossorigin />
 <link rel="preconnect" href="https://brainstorm.world" crossorigin />
 <style>
@@ -119,6 +120,38 @@
   .empty, .error { padding: 16px; text-align: center; color: var(--muted); font-size: 13px; }
   .error { color: #c00; }
 
+  .toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .toggle-track {
+    position: relative;
+    width: 38px; height: 22px;
+    border-radius: 11px;
+    background: #ccc;
+    flex-shrink: 0;
+    transition: background .15s;
+  }
+  .toggle-thumb {
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,.25);
+    transition: transform .15s;
+  }
+  .toggle input:checked + .toggle-track { background: var(--accent); }
+  .toggle input:checked + .toggle-track .toggle-thumb { transform: translateX(16px); }
+  .toggle input:focus-visible + .toggle-track { box-shadow: 0 0 0 3px rgba(37,99,235,.3); }
+  .toggle-text { font-size: 13px; line-height: 1.3; }
+  .toggle-sub { display: block; color: var(--muted); font-size: 11px; }
+
   @media (max-width: 960px) {
     .popup.open, .columns { --cols: 1 !important; }
     .popup-col + .popup-col { border-left: 0; border-top: 1px solid #eee; }
@@ -132,6 +165,14 @@
       <input id="q" type="text" autocomplete="off" spellcheck="false" placeholder="Type to search&hellip;" autofocus />
       <div id="popup" class="popup" role="listbox"></div>
     </div>
+    <label class="toggle" title="Rank both Brainstorm columns from your own Web of Trust instead of the house key">
+      <input id="observer" type="checkbox" />
+      <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      <span class="toggle-text">
+        Search as me
+        <span class="toggle-sub">Rank Brainstorm by your Web of Trust (needs a Nostr extension). Off = house key.</span>
+      </span>
+    </label>
   </div>
   <div id="columns" class="columns" hidden></div>
 </div>
@@ -142,25 +183,33 @@
   const FULL_LIMIT = 40;
   const DEBOUNCE_MS = 120;
 
-  const VESPA_BASE = "https://brainstormserver-staging.nosfabrica.com";
+  const BRAINSTORM_PROD_BASE = "https://brainstormserver.nosfabrica.com";
+  const BRAINSTORM_STAGING_BASE = "https://brainstormserver-staging.nosfabrica.com";
+
+  // When on, both Brainstorm columns rank from the signed-in user's own Web of
+  // Trust (ownPubkey=true + a per-server JWT). When off, they use the house key.
+  let asObserver = false;
 
   // Acquire (and cache) a Brainstorm JWT for the signed-in user via the NIP-07
   // signer. The challenge is signed once per token lifetime — not per request —
   // so type-ahead searches reuse the token instead of prompting the extension.
   // Concurrent callers (popup + full search) share one in-flight request, so a
-  // single signer prompt covers them all.
-  let vespaToken = null;
-  let vespaTokenPromise = null;
-  function getVespaToken(forceRefresh) {
-    if (forceRefresh) { vespaToken = null; }
-    if (vespaToken) return Promise.resolve(vespaToken);
-    if (!vespaTokenPromise) {
-      vespaTokenPromise = (async () => {
+  // single signer prompt covers them all. Tokens are cached per server base,
+  // since the production and staging servers issue distinct challenges/tokens.
+  const vespaTokens = new Map();          // base -> token
+  const vespaTokenPromises = new Map();   // base -> in-flight Promise
+  function getVespaToken(base, forceRefresh) {
+    if (forceRefresh) vespaTokens.delete(base);
+    const cached = vespaTokens.get(base);
+    if (cached) return Promise.resolve(cached);
+    let inflight = vespaTokenPromises.get(base);
+    if (!inflight) {
+      inflight = (async () => {
         if (!(window.nostr && window.nostr.signEvent)) {
           throw new Error("No Nostr extension found (window.nostr)");
         }
         const pubkey = await window.nostr.getPublicKey();
-        const chRes = await fetch(`${VESPA_BASE}/authChallenge/${pubkey}`);
+        const chRes = await fetch(`${base}/authChallenge/${pubkey}`);
         if (!chRes.ok) throw new Error("Auth challenge failed: HTTP " + chRes.status);
         const challenge = (await chRes.json())?.data?.challenge;
         if (!challenge) throw new Error("Auth challenge returned no challenge");
@@ -170,7 +219,7 @@
           content: "",
           tags: [["t", "brainstorm_login"], ["challenge", challenge]],
         });
-        const vRes = await fetch(`${VESPA_BASE}/authChallenge/${pubkey}/verify`, {
+        const vRes = await fetch(`${base}/authChallenge/${pubkey}/verify`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ signed_event: signed }),
@@ -178,17 +227,18 @@
         if (!vRes.ok) throw new Error("Auth verify failed: HTTP " + vRes.status);
         const token = (await vRes.json())?.data?.token;
         if (!token) throw new Error("Auth verify returned no token");
-        vespaToken = token;
+        vespaTokens.set(base, token);
         return token;
       })();
       // Clear the in-flight slot once settled so the next call hits the cache
       // (on success) or can retry (on failure), instead of reusing a stale promise.
-      vespaTokenPromise.catch(() => {}).finally(() => { vespaTokenPromise = null; });
+      inflight.catch(() => {}).finally(() => { vespaTokenPromises.delete(base); });
+      vespaTokenPromises.set(base, inflight);
     }
-    return vespaTokenPromise;
+    return inflight;
   }
 
-  function vespaSearch(text, signal, { limit, ownPubkey, token }) {
+  function vespaSearch(base, text, signal, { limit, ownPubkey, token }) {
     const params = new URLSearchParams({
       text,
       onlyRanked: "true",
@@ -196,7 +246,7 @@
     });
     const opts = { signal };
     if (token) opts.headers = { access_token: token };
-    return fetch(`${VESPA_BASE}/search/byText?${params}`, opts).then(r => {
+    return fetch(`${base}/search/byText?${params}`, opts).then(r => {
       if (!r.ok) { const e = new Error("HTTP " + r.status); e.status = r.status; throw e; }
       return r.json();
     }).then(d => {
@@ -211,9 +261,33 @@
 
   const VESPA_SKIP = new Set(["sddocname","documentid","name","display_name","about","picture","banner","_relevance","_quality_score"]);
 
+  // A Brainstorm column. When the "Search as me" toggle is off it ranks with the
+  // house key (ownPubkey=false, no token); when on it authenticates as the
+  // signed-in user (ownPubkey=true) and retries once with a fresh token on 401.
+  function brainstormEngine(id, title, base) {
+    return {
+      id,
+      title,
+      search(text, signal, limit) {
+        if (!asObserver) {
+          return vespaSearch(base, text, signal, { limit, ownPubkey: false });
+        }
+        const run = force => getVespaToken(base, force)
+          .then(token => vespaSearch(base, text, signal, { limit, ownPubkey: true, token }));
+        return run(false).catch(err => {
+          if (err && err.status === 401) return run(true);
+          throw err;
+        });
+      },
+      qualityOf(h) { return h._quality_score ?? 0; },
+      qualityLabel: "Quality",
+      skipProps: VESPA_SKIP,
+    };
+  }
+
   const engines = [
     {
-      id: "brainstorm",
+      id: "meili",
       title: "Meili",
       search(text, signal, limit) {
         const url = `https://brainstorm.world/api/search/profiles/meili?q=${encodeURIComponent(text)}&limit=${limit}&offset=0&wotPov=house`;
@@ -234,34 +308,8 @@
       qualityLabel: "WoT",
       skipProps: new Set(["name","display_name","displayName","about","picture","banner","event_sig","event_id","id","created_at","updated_at","indexed_at"]),
     },
-    {
-      id: "vespa",
-      title: "Vespa",
-      search(text, signal, limit) {
-        return vespaSearch(text, signal, { limit, ownPubkey: false });
-      },
-      qualityOf(h) { return h._quality_score ?? 0; },
-      qualityLabel: "Quality",
-      skipProps: VESPA_SKIP,
-    },
-    {
-      id: "vespa-you",
-      title: "Vespa (You)",
-      search(text, signal, limit) {
-        // Authenticate as the signed-in user so the server ranks from your own
-        // perspective (ownPubkey=true). Retry once with a fresh token if the
-        // cached JWT has expired (401), which re-signs via the NIP-07 extension.
-        const run = force => getVespaToken(force)
-          .then(token => vespaSearch(text, signal, { limit, ownPubkey: true, token }));
-        return run(false).catch(err => {
-          if (err && err.status === 401) return run(true);
-          throw err;
-        });
-      },
-      qualityOf(h) { return h._quality_score ?? 0; },
-      qualityLabel: "Quality",
-      skipProps: VESPA_SKIP,
-    },
+    brainstormEngine("brainstorm-prod", "Brainstorm (Production)", BRAINSTORM_PROD_BASE),
+    brainstormEngine("brainstorm-staging", "Brainstorm (Staging)", BRAINSTORM_STAGING_BASE),
   ];
 
   const $q = document.getElementById("q");
@@ -501,6 +549,17 @@
 
   $q.addEventListener("focus", () => {
     if (state.some(s => s.hits && s.hits.length > 0) && $q.value.trim()) $popup.classList.add("open");
+  });
+
+  const $observer = document.getElementById("observer");
+  $observer.addEventListener("change", () => {
+    asObserver = $observer.checked;
+    // Re-run whatever view is showing so both Brainstorm columns switch between
+    // the house key and the signed-in user's perspective.
+    const text = $q.value.trim();
+    if (!text) return;
+    if (!$columns.hidden) runFullSearch(text);
+    else if ($popup.classList.contains("open")) runPopupSearch(text);
   });
 })();
 </script>
